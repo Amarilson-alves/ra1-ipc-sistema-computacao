@@ -1,97 +1,162 @@
-﻿# teste de commit pelo Visual Studio
-# -*- coding: utf-8 -*-
+﻿# -*- coding: utf-8 -*-
 import tkinter as tk
 from tkinter import ttk, scrolledtext
 import json
 import threading
 import time
 from pathlib import Path
-
-# Importa a classe IPCClient do arquivo que você criou
 from ipc_client import IPCClient
 
 class IPCApp:
     def __init__(self, root):
         self.root = root
-        self.root.title("RA1 IPC - Frontend")
-        self.root.geometry("700x500")
+        self.root.title("RA1 IPC - Demonstração de Mecanismos IPC")
+        self.root.geometry("900x700")
 
         # Configuração do cliente IPC
-        # AJUSTE ESTE CAMINHO PARA O LOCAL DO SEU EXECUTÁVEL!
-        backend_path = Path(__file__).parent.parent / "backend-cpp" / "build" / "bin" / "Release" / "ra1_ipc_backend.exe"
-
-        # Linhas de debug para verificar o caminho
-        print(f"Procurando backend em: {backend_path}")
-        print(f"O arquivo existe? {backend_path.exists()}")
+        backend_path = Path(r"C:\Users\LorD\Documents\2 - PROJETOS VS - STUDIO\RA1 - IPC - SISTEMA DA COMPUTACAO\backend-cpp\build\bin\Release\ra1_ipc_backend.exe")
         self.ipc_client = IPCClient(backend_path)
 
         self._polling_thread = None
         self._running = False
+        self.current_mechanism = None
 
         self.create_widgets()
+        self.setup_ipc()
 
     def create_widgets(self):
-        """Cria a interface gráfica básica."""
+        """Cria a interface gráfica completa."""
+        # Frame principal
         main_frame = ttk.Frame(self.root, padding="10")
         main_frame.pack(fill=tk.BOTH, expand=True)
 
-        # Área de log
-        self.log_area = scrolledtext.ScrolledText(main_frame, width=80, height=20, state='disabled')
-        self.log_area.pack(fill=tk.BOTH, expand=True, pady=(0, 10))
+        # ===== SEÇÃO DE CONTROLES =====
+        control_frame = ttk.LabelFrame(main_frame, text="Controles", padding="10")
+        control_frame.pack(fill=tk.X, pady=(0, 10))
 
-        # Botões de controle
-        button_frame = ttk.Frame(main_frame)
-        button_frame.pack(fill=tk.X)
+        # Botões de mecanismo
+        mechanism_frame = ttk.Frame(control_frame)
+        mechanism_frame.pack(fill=tk.X, pady=(0, 10))
 
-        self.start_button = ttk.Button(button_frame, text="Iniciar Backend", command=self.start_backend)
-        self.start_button.pack(side=tk.LEFT, padx=(0, 5))
+        ttk.Label(mechanism_frame, text="Mecanismo IPC:").pack(side=tk.LEFT, padx=(0, 10))
+        
+        self.pipe_btn = ttk.Button(mechanism_frame, text="Pipes", 
+                                  command=lambda: self.start_mechanism("pipe"))
+        self.pipe_btn.pack(side=tk.LEFT, padx=(0, 5))
 
-        self.stop_button = ttk.Button(button_frame, text="Parar Backend", command=self.stop_backend, state='disabled')
-        self.stop_button.pack(side=tk.LEFT)
+        self.socket_btn = ttk.Button(mechanism_frame, text="Sockets", 
+                                    command=lambda: self.start_mechanism("socket"),
+                                    state='disabled')
+        self.socket_btn.pack(side=tk.LEFT, padx=(0, 5))
 
-        # Status bar
-        self.status_var = tk.StringVar(value="Pronto")
-        status_bar = ttk.Label(self.root, textvariable=self.status_var, relief=tk.SUNKEN, anchor=tk.W)
+        self.shm_btn = ttk.Button(mechanism_frame, text="Memória Compartilhada", 
+                                 command=lambda: self.start_mechanism("shm"),
+                                 state='disabled')
+        self.shm_btn.pack(side=tk.LEFT)
+
+        # Controles de envio de mensagem
+        message_frame = ttk.Frame(control_frame)
+        message_frame.pack(fill=tk.X)
+
+        ttk.Label(message_frame, text="Mensagem:").pack(side=tk.LEFT, padx=(0, 10))
+        
+        self.message_var = tk.StringVar()
+        self.message_entry = ttk.Entry(message_frame, textvariable=self.message_var, width=30)
+        self.message_entry.pack(side=tk.LEFT, padx=(0, 10))
+        self.message_entry.bind('<Return>', lambda e: self.send_message())
+
+        self.send_btn = ttk.Button(message_frame, text="Enviar", 
+                                  command=self.send_message, state='disabled')
+        self.send_btn.pack(side=tk.LEFT, padx=(0, 10))
+
+        self.stop_btn = ttk.Button(message_frame, text="Parar Mecanismo", 
+                                  command=self.stop_mechanism, state='disabled')
+        self.stop_btn.pack(side=tk.LEFT)
+
+        # ===== SEÇÃO DE STATUS =====
+        status_frame = ttk.LabelFrame(main_frame, text="Status", padding="10")
+        status_frame.pack(fill=tk.X, pady=(0, 10))
+
+        self.status_var = tk.StringVar(value="Nenhum mecanismo ativo")
+        status_label = ttk.Label(status_frame, textvariable=self.status_var, 
+                                font=("Segoe UI", 10, "bold"))
+        status_label.pack()
+
+        # ===== SEÇÃO DE LOG =====
+        log_frame = ttk.LabelFrame(main_frame, text="Log de Eventos", padding="10")
+        log_frame.pack(fill=tk.BOTH, expand=True)
+
+        self.log_area = scrolledtext.ScrolledText(log_frame, width=100, height=20, 
+                                                 state='disabled', font=("Consolas", 9))
+        self.log_area.pack(fill=tk.BOTH, expand=True)
+
+        # ===== BARRA DE STATUS =====
+        status_bar = ttk.Frame(self.root)
         status_bar.pack(side=tk.BOTTOM, fill=tk.X)
 
+        self.backend_status = tk.StringVar(value="Backend: Parado")
+        ttk.Label(status_bar, textvariable=self.backend_status).pack(side=tk.LEFT, padx=5)
+
+        self.messages_sent = tk.StringVar(value="Mensagens: 0")
+        ttk.Label(status_bar, textvariable=self.messages_sent).pack(side=tk.RIGHT, padx=5)
+
+    def setup_ipc(self):
+        """Configura e inicia a comunicação IPC."""
+        self.start_backend()
+
     def start_backend(self):
-        """Inicia o processo do backend em uma thread separada."""
+        """Inicia o processo do backend."""
         def start_thread():
             success = self.ipc_client.start()
             self.root.after(0, lambda: self.on_backend_started(success))
 
         threading.Thread(target=start_thread, daemon=True).start()
-        self.start_button.config(state='disabled')
-        self.status_var.set("Iniciando backend...")
 
     def on_backend_started(self, success: bool):
-        """Callback chamado quando a tentativa de iniciar o backend termina."""
+        """Callback chamado quando o backend é iniciado."""
         if success:
-            self.stop_button.config(state='normal')
-            self.log("Backend iniciado com sucesso.")
-            self.status_var.set("Backend em execução")
+            self.backend_status.set("Backend: Executando")
             self.start_event_polling()
+            self.log("Backend iniciado com sucesso.")
         else:
-            self.start_button.config(state='normal')
-            self.log("Falha ao iniciar o backend.")
-            self.status_var.set("Falha ao iniciar backend")
+            self.backend_status.set("Backend: Falha ao iniciar")
+            self.log("Falha ao iniciar backend.")
 
-    def stop_backend(self):
-        """Para o processo do backend."""
-        def stop_thread():
-            self.ipc_client.stop()
-            self.root.after(0, self.on_backend_stopped)
+    def start_mechanism(self, mechanism):
+        """Inicia um mecanismo IPC específico."""
+        self.current_mechanism = mechanism
+        command = {"cmd": "start", "mechanism": mechanism}
+        self.ipc_client.send_command(command)
+        self.log(f"Iniciando mecanismo: {mechanism}")
 
-        threading.Thread(target=stop_thread, daemon=True).start()
-        self.stop_button.config(state='disabled')
-        self.status_var.set("Parando backend...")
+        # Atualiza UI
+        self.send_btn.config(state='normal')
+        self.stop_btn.config(state='normal')
+        self.pipe_btn.config(state='disabled')
+        self.status_var.set(f"Mecanismo ativo: {mechanism.upper()}")
 
-    def on_backend_stopped(self):
-        """Callback chamado quando o backend é parado."""
-        self.start_button.config(state='normal')
-        self.stop_event_polling()
-        self.log("Backend parado.")
-        self.status_var.set("Backend parado")
+    def stop_mechanism(self):
+        """Para o mecanismo IPC atual."""
+        if self.current_mechanism:
+            command = {"cmd": "stop"}
+            self.ipc_client.send_command(command)
+            self.log(f"Parando mecanismo: {self.current_mechanism}")
+
+            # Atualiza UI
+            self.send_btn.config(state='disabled')
+            self.stop_btn.config(state='disabled')
+            self.pipe_btn.config(state='normal')
+            self.status_var.set("Nenhum mecanismo ativo")
+            self.current_mechanism = None
+
+    def send_message(self):
+        """Envia uma mensagem através do mecanismo atual."""
+        message = self.message_var.get().strip()
+        if message and self.current_mechanism:
+            command = {"cmd": "send", "text": message}
+            self.ipc_client.send_command(command)
+            self.message_var.set("")  # Limpa o campo
+            self.log(f"Enviando: {message}")
 
     def start_event_polling(self):
         """Inicia uma thread para buscar eventos do backend."""
@@ -117,19 +182,30 @@ class IPCApp:
     def handle_event(self, event_data: dict):
         """Processa um evento recebido do backend."""
         event_type = event_data.get('event', 'unknown')
-        self.log(f"Evento: {event_type} -> {json.dumps(event_data)}")
+        
+        # Formata o evento para exibição
+        formatted_event = json.dumps(event_data, indent=2, ensure_ascii=False)
+        self.log(f"Evento: {event_type}\n{formatted_event}")
+
+        # Atualiza status baseado no evento
+        if event_type == "ready":
+            self.status_var.set(f"Mecanismo pronto: {event_data.get('mechanism', 'unknown')}")
+        elif event_type == "stopped":
+            self.status_var.set("Mecanismo parado")
 
     def log(self, message: str):
         """Adiciona uma mensagem à área de log."""
         self.log_area.config(state='normal')
-        self.log_area.insert(tk.END, message + "\n")
+        self.log_area.insert(tk.END, message + "\n\n")
         self.log_area.see(tk.END)
         self.log_area.config(state='disabled')
 
     def on_closing(self):
         """Lida com o fechamento da janela."""
         self.stop_event_polling()
-        self.stop_backend()
+        if self.current_mechanism:
+            self.stop_mechanism()
+        self.ipc_client.stop()
         self.root.destroy()
 
 def main():

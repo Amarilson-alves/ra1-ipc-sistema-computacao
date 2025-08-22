@@ -31,12 +31,16 @@ include_directories(include)
 add_executable(ra1_ipc_backend
     src/main.cpp
     src/json_codec.cpp
+    src/pipe_module.cpp  # <- NOVO ARQUIVO ADICIONADO
 )
 
 # Linka a biblioteca JSON ao nosso executável
 target_link_libraries(ra1_ipc_backend PRIVATE nlohmann_json)
 
-# Configurações específicas para Windows (para sockets, futuro)
+# Configurações específicas para Windows
 if(WIN32)
-    target_link_libraries(ra1_ipc_backend PRIVATE ws2_32)
+    target_link_libraries(ra1_ipc_backend 
+        PRIVATE 
+            ws2_32      # Para sockets (futuro)
+    )
 endif()
