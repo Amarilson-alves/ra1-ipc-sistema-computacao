@@ -1,0 +1,4 @@
+# Tkinter é parte da instalação padrão do Python em Windows
+# Adicione bibliotecas extras se usar
+pillow
+requests

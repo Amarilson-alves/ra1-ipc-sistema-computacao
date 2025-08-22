@@ -1,0 +1,22 @@
+# C/C++ build artifacts
+backend-cpp/build/
+*.exe
+*.out
+*.o
+*.obj
+*.pdb
+*.ilk
+*.log
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+env/
+venv/
+
+# Editors/OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
