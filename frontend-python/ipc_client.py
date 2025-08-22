@@ -1,4 +1,4 @@
-import subprocess
+Ôªøimport subprocess
 import json
 import threading
 import queue
@@ -17,7 +17,7 @@ class IPCClient:
     def start(self):
         """Inicia o processo do backend."""
         if self.process is not None:
-            print("Backend j· est· em execuÁ„o.")
+            print("Backend j√° est√° em execu√ß√£o.")
             return False
 
         try:
@@ -33,7 +33,7 @@ class IPCClient:
             )
             self._running = True
 
-            # Inicia thread para ler stdout n„o bloqueante
+            # Inicia thread para ler stdout n√£o bloqueante
             self._stdout_thread = threading.Thread(target=self._read_stdout, daemon=True)
             self._stdout_thread.start()
 
@@ -44,7 +44,7 @@ class IPCClient:
             print(f"Backend iniciado (PID: {self.process.pid})")
             return True
         except FileNotFoundError:
-            print(f"Erro: Execut·vel n„o encontrado em {self.executable_path}")
+            print(f"Erro: Execut√°vel n√£o encontrado em {self.executable_path}")
             return False
         except Exception as e:
             print(f"Erro ao iniciar backend: {e}")
@@ -54,9 +54,9 @@ class IPCClient:
         """Para o processo do backend."""
         self._running = False
         if self.process:
-            # Envia um comando de parada gentil (ser· implementado depois)
+            # Envia um comando de parada gentil (ser√° implementado depois)
             # self.send_command({"cmd": "stop"})
-            # Espera um pouco e termina o processo se n„o sair
+            # Espera um pouco e termina o processo se n√£o sair
             try:
                 self.process.terminate()
                 self.process.wait(timeout=2.0)
@@ -68,7 +68,7 @@ class IPCClient:
     def send_command(self, command_dict: dict):
         """Envia um comando JSON para o stdin do backend."""
         if self.process is None or self.process.stdin is None:
-            print("Backend n„o est· em execuÁ„o. Comando n„o enviado.")
+            print("Backend n√£o est√° em execu√ß√£o. Comando n√£o enviado.")
             return
 
         try:
@@ -79,7 +79,7 @@ class IPCClient:
             print("Erro: Pipe quebrado. O backend pode ter terminado.")
 
     def _read_stdout(self):
-        """LÍ stdout do backend linha a linha e coloca na fila."""
+        """L√™ stdout do backend linha a linha e coloca na fila."""
         if self.process is None:
             return
         while self._running:
@@ -88,14 +88,14 @@ class IPCClient:
                 if not line: # EOF
                     break
                 line = line.strip()
-                if line: # Linha n„o vazia
+                if line: # Linha n√£o vazia
                     self.stdout_queue.put(line)
             except ValueError: # Isso pode acontecer se o pipe for fechado durante a leitura
                 break
         print("Thread de leitura de stdout terminou.")
 
     def _read_stderr(self):
-        """LÍ stderr do backend e apenas imprime no console."""
+        """L√™ stderr do backend e apenas imprime no console."""
         if self.process is None:
             return
         while self._running:
@@ -109,7 +109,7 @@ class IPCClient:
         print("Thread de leitura de stderr terminou.")
 
     def get_event(self, block=True, timeout=None):
-        """Tenta obter um evento da fila. Retorna None se a fila estiver vazia ou apÛs timeout."""
+        """Tenta obter um evento da fila. Retorna None se a fila estiver vazia ou ap√≥s timeout."""
         try:
             return self.stdout_queue.get(block=block, timeout=timeout)
         except queue.Empty:
