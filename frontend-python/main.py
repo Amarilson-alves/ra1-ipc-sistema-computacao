@@ -1,4 +1,5 @@
-﻿# -*- coding: utf-8 -*-
+﻿# teste de commit pelo Visual Studio
+# -*- coding: utf-8 -*-
 import tkinter as tk
 from tkinter import ttk, scrolledtext
 import json
