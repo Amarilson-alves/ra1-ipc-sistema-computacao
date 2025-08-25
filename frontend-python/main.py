@@ -7,11 +7,26 @@ import time
 from pathlib import Path
 from ipc_client import IPCClient
 
+class PipeManager:
+    def __init__(self):
+        self.messages_sent = []
+        self.messages_received = []
+        self.is_running = False
+        self.stats = {"sent": 0, "received": 0}
+    
+    def add_sent_message(self, message):
+        self.messages_sent.append(message)
+        self.stats["sent"] += 1
+        
+    def add_received_message(self, message):
+        self.messages_received.append(message)
+        self.stats["received"] += 1
+
 class IPCApp:
     def __init__(self, root):
         self.root = root
         self.root.title("RA1 IPC - Demonstração de Mecanismos IPC")
-        self.root.geometry("900x700")
+        self.root.geometry("1000x800")
 
         # Configuração do cliente IPC
         backend_path = Path(r"C:\Users\LorD\Documents\2 - PROJETOS VS - STUDIO\RA1 - IPC - SISTEMA DA COMPUTACAO\backend-cpp\build\bin\Release\ra1_ipc_backend.exe")
@@ -20,6 +35,7 @@ class IPCApp:
         self._polling_thread = None
         self._running = False
         self.current_mechanism = None
+        self.pipe_manager = PipeManager()
 
         self.create_widgets()
         self.setup_ipc()
@@ -73,6 +89,20 @@ class IPCApp:
                                   command=self.stop_mechanism, state='disabled')
         self.stop_btn.pack(side=tk.LEFT)
 
+        # ===== SEÇÃO DE VISUALIZAÇÃO DE PIPES =====
+        pipe_frame = ttk.LabelFrame(main_frame, text="Visualização dos Pipes", padding="10")
+        pipe_frame.pack(fill=tk.BOTH, expand=True, pady=(0, 10))
+
+        # Área de texto para mostrar as filas de mensagens
+        self.pipe_text = scrolledtext.ScrolledText(pipe_frame, width=80, height=10, 
+                                                  state='disabled', font=("Consolas", 9))
+        self.pipe_text.pack(fill=tk.BOTH, expand=True)
+
+        # Botão para limpar a visualização
+        clear_btn = ttk.Button(pipe_frame, text="Limpar Visualização", 
+                              command=self.clear_pipe_display)
+        clear_btn.pack(pady=(5, 0))
+
         # ===== SEÇÃO DE STATUS =====
         status_frame = ttk.LabelFrame(main_frame, text="Status", padding="10")
         status_frame.pack(fill=tk.X, pady=(0, 10))
@@ -86,7 +116,7 @@ class IPCApp:
         log_frame = ttk.LabelFrame(main_frame, text="Log de Eventos", padding="10")
         log_frame.pack(fill=tk.BOTH, expand=True)
 
-        self.log_area = scrolledtext.ScrolledText(log_frame, width=100, height=20, 
+        self.log_area = scrolledtext.ScrolledText(log_frame, width=100, height=15, 
                                                  state='disabled', font=("Consolas", 9))
         self.log_area.pack(fill=tk.BOTH, expand=True)
 
@@ -97,8 +127,8 @@ class IPCApp:
         self.backend_status = tk.StringVar(value="Backend: Parado")
         ttk.Label(status_bar, textvariable=self.backend_status).pack(side=tk.LEFT, padx=5)
 
-        self.messages_sent = tk.StringVar(value="Mensagens: 0")
-        ttk.Label(status_bar, textvariable=self.messages_sent).pack(side=tk.RIGHT, padx=5)
+        self.messages_count = tk.StringVar(value="Mensagens: 0/0")
+        ttk.Label(status_bar, textvariable=self.messages_count).pack(side=tk.RIGHT, padx=5)
 
     def setup_ipc(self):
         """Configura e inicia a comunicação IPC."""
@@ -187,11 +217,58 @@ class IPCApp:
         formatted_event = json.dumps(event_data, indent=2, ensure_ascii=False)
         self.log(f"Evento: {event_type}\n{formatted_event}")
 
-        # Atualiza status baseado no evento
-        if event_type == "ready":
+        # Processa eventos específicos de pipes
+        if event_type == "sent":
+            text = event_data.get('text', '')
+            self.pipe_manager.add_sent_message(text)
+            self.update_pipe_display()
+            
+        elif event_type == "received":
+            text = event_data.get('text', '')
+            self.pipe_manager.add_received_message(text)
+            self.update_pipe_display()
+            
+        elif event_type == "ready":
+            self.pipe_manager.is_running = True
             self.status_var.set(f"Mecanismo pronto: {event_data.get('mechanism', 'unknown')}")
+            
         elif event_type == "stopped":
+            self.pipe_manager.is_running = False
             self.status_var.set("Mecanismo parado")
+            self.update_pipe_display()
+
+        # Atualiza a barra de status com contagem de mensagens
+        self.messages_count.set(f"Mensagens: {self.pipe_manager.stats['sent']}/{self.pipe_manager.stats['received']}")
+
+    def update_pipe_display(self):
+        """Atualiza a visualização da fila de mensagens dos pipes."""
+        self.pipe_text.config(state='normal')
+        self.pipe_text.delete(1.0, tk.END)
+        
+        # Adiciona mensagens enviadas
+        self.pipe_text.insert(tk.END, "=== Mensagens Enviadas ===\n")
+        for msg in self.pipe_manager.messages_sent[-10:]:  # Mostra últimas 10
+            self.pipe_text.insert(tk.END, f"▶ {msg}\n")
+        
+        # Adiciona mensagens recebidas
+        self.pipe_text.insert(tk.END, "\n=== Mensagens Recebidas ===\n")
+        for msg in self.pipe_manager.messages_received[-10:]:  # Mostra últimas 10
+            self.pipe_text.insert(tk.END, f"◀ {msg}\n")
+        
+        # Adiciona estatísticas
+        self.pipe_text.insert(tk.END, f"\n=== Estatísticas ===\n")
+        self.pipe_text.insert(tk.END, f"Total enviadas: {self.pipe_manager.stats['sent']}\n")
+        self.pipe_text.insert(tk.END, f"Total recebidas: {self.pipe_manager.stats['received']}\n")
+        
+        self.pipe_text.config(state='disabled')
+
+    def clear_pipe_display(self):
+        """Limpa a visualização das filas de pipes."""
+        self.pipe_manager.messages_sent.clear()
+        self.pipe_manager.messages_received.clear()
+        self.pipe_manager.stats = {"sent": 0, "received": 0}
+        self.update_pipe_display()
+        self.messages_count.set("Mensagens: 0/0")
 
     def log(self, message: str):
         """Adiciona uma mensagem à área de log."""

@@ -3,7 +3,6 @@
 #include <memory>
 #include <thread>
 
-// Forward declaration para evitar include circular
 class IPCManager;
 
 class PipeModule {
@@ -15,21 +14,22 @@ public:
     void stop();
     bool send(const std::string& message);
     bool is_running() const;
+    std::string get_status() const;
 
 private:
     void cleanup();
     void reader_thread();
-    void writer_thread();
 
     IPCManager* manager_;
     bool running_ = false;
+    bool reader_running_ = false;
 
-    // Handles do Windows para pipes e processo
+    // Handles do Windows
     void* read_pipe_ = nullptr;
     void* write_pipe_ = nullptr;
     void* child_process_ = nullptr;
-    void* child_thread_ = nullptr;
 
     std::thread reader_thread_;
-    std::thread writer_thread_;
+    int messages_sent_ = 0;
+    int messages_received_ = 0;
 };
