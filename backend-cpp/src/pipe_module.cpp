@@ -9,7 +9,15 @@
 // Forward declaration da classe principal
 class IPCManager;
 
-PipeModule::PipeModule(IPCManager* manager) : manager_(manager) {}
+PipeModule::PipeModule(IPCManager* manager) : manager_(manager),
+running_(false),
+reader_running_(false),
+messages_sent_(0),
+messages_received_(0),
+read_pipe_(nullptr),
+write_pipe_(nullptr),
+child_process_(nullptr) {
+}
 
 PipeModule::~PipeModule() {
     stop();

@@ -9,11 +9,11 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 
 # =======================================================================
-# CONFIGURAÇÃO PARA BAIXAR A BIBLIOTECA JSON (ÚNICA NECESSÁRIA AGORA)
+# CONFIGURAÇÃO PARA BAIXAR A BIBLIOTECA JSON
 # =======================================================================
 include(FetchContent)
 
-# Configuração da biblioteca nlohmann/json (CRUCIAL para compilar)
+# Configuração da biblioteca nlohmann/json
 FetchContent_Declare(
   nlohmann_json
   URL https://github.com/nlohmann/json/releases/download/v3.11.2/json.tar.xz
@@ -31,8 +31,9 @@ include_directories(include)
 add_executable(ra1_ipc_backend
     src/main.cpp
     src/json_codec.cpp
-    src/pipe_module.cpp  # <- NOVO ARQUIVO ADICIONADO
-)
+    src/pipe_module.cpp
+    src/socket_module.cpp  # NOVO MÓDULO
+ "src/ipc_manager.cpp")
 
 # Linka a biblioteca JSON ao nosso executável
 target_link_libraries(ra1_ipc_backend PRIVATE nlohmann_json)
@@ -41,6 +42,6 @@ target_link_libraries(ra1_ipc_backend PRIVATE nlohmann_json)
 if(WIN32)
     target_link_libraries(ra1_ipc_backend 
         PRIVATE 
-            ws2_32      # Para sockets (futuro)
+            ws2_32      # Para sockets (AGORA NECESSÁRIO)
     )
 endif()
