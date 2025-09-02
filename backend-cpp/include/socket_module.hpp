@@ -5,6 +5,7 @@
 #include <winsock2.h>
 #include <ws2tcpip.h>
 #include <nlohmann/json.hpp>
+#include <mutex>                  // ADICIONADO: para proteger o socket do listener
 
 class IPCManager;
 
@@ -35,7 +36,14 @@ private:
     std::atomic<bool> running_{ false };
     std::atomic<bool> connected_{ false };
     SOCKET server_socket_{ INVALID_SOCKET };
+
+    // Lado CLIENTE (usado pelo thread cliente interno)
     SOCKET client_socket_{ INVALID_SOCKET };
+
+    // Lado SERVIDOR (socket aceito que corresponde ao listener interno)
+    SOCKET listener_socket_{ INVALID_SOCKET };   // ADICIONADO: socket do listener
+    std::mutex listener_mtx_;                    // ADICIONADO: mutex para proteger acesso ao listener
+
     std::thread server_thread_;
     std::thread client_thread_;
     int messages_sent_{ 0 };

@@ -56,18 +56,24 @@ class IPCApp:
 
         ttk.Label(mechanism_frame, text="Mecanismo IPC:").pack(side=tk.LEFT, padx=(0, 10))
         
-        self.pipe_btn = ttk.Button(mechanism_frame, text="Pipes", 
-                                  command=lambda: self.start_mechanism("pipe"))
+        self.pipe_btn = ttk.Button(
+            mechanism_frame, text="Pipes",
+            command=lambda: self.start_mechanism("pipe")
+        )
         self.pipe_btn.pack(side=tk.LEFT, padx=(0, 5))
 
-        self.socket_btn = ttk.Button(mechanism_frame, text="Sockets", 
-                                    command=lambda: self.start_mechanism("socket"),
-                                    state='disabled')
+        self.socket_btn = ttk.Button(
+            mechanism_frame, text="Sockets",
+            command=lambda: self.start_mechanism("socket"),
+            state='normal'
+        )
         self.socket_btn.pack(side=tk.LEFT, padx=(0, 5))
 
-        self.shm_btn = ttk.Button(mechanism_frame, text="Memória Compartilhada", 
-                                 command=lambda: self.start_mechanism("shm"),
-                                 state='disabled')
+        self.shm_btn = ttk.Button(
+            mechanism_frame, text="Memória Compartilhada",
+            command=lambda: self.start_mechanism("shm"),
+            state='normal'  # HABILITADO
+        )
         self.shm_btn.pack(side=tk.LEFT)
 
         # Controles de envio de mensagem
@@ -159,10 +165,14 @@ class IPCApp:
         self.ipc_client.send_command(command)
         self.log(f"Iniciando mecanismo: {mechanism}")
 
-        # Atualiza UI
+        # Atualiza UI - Habilita envio/stop; desabilita apenas o botão do mecanismo ativo
         self.send_btn.config(state='normal')
         self.stop_btn.config(state='normal')
-        self.pipe_btn.config(state='disabled')
+
+        self.pipe_btn.config(state='disabled' if mechanism == 'pipe' else 'normal')
+        self.socket_btn.config(state='disabled' if mechanism == 'socket' else 'normal')
+        self.shm_btn.config(state='disabled' if mechanism == 'shm' else 'normal')
+
         self.status_var.set(f"Mecanismo ativo: {mechanism.upper()}")
 
     def stop_mechanism(self):
@@ -172,10 +182,12 @@ class IPCApp:
             self.ipc_client.send_command(command)
             self.log(f"Parando mecanismo: {self.current_mechanism}")
 
-            # Atualiza UI
+            # Atualiza UI - Desabilita envio/stop; reabilita todos os botões de mecanismo
             self.send_btn.config(state='disabled')
             self.stop_btn.config(state='disabled')
             self.pipe_btn.config(state='normal')
+            self.socket_btn.config(state='normal')
+            self.shm_btn.config(state='normal')
             self.status_var.set("Nenhum mecanismo ativo")
             self.current_mechanism = None
 
@@ -212,12 +224,13 @@ class IPCApp:
     def handle_event(self, event_data: dict):
         """Processa um evento recebido do backend."""
         event_type = event_data.get('event', 'unknown')
+        mechanism = event_data.get('mechanism', '')
         
         # Formata o evento para exibição
         formatted_event = json.dumps(event_data, indent=2, ensure_ascii=False)
         self.log(f"Evento: {event_type}\n{formatted_event}")
 
-        # Processa eventos específicos de pipes
+        # Processa eventos específicos
         if event_type == "sent":
             text = event_data.get('text', '')
             self.pipe_manager.add_sent_message(text)
@@ -232,9 +245,24 @@ class IPCApp:
             self.pipe_manager.is_running = True
             self.status_var.set(f"Mecanismo pronto: {event_data.get('mechanism', 'unknown')}")
             
+        elif event_type == "started":
+            mech = event_data.get('mechanism', 'unknown')
+            self.status_var.set(f"Mecanismo ativo: {mech.upper()}")
+            self.send_btn.config(state='normal')
+            self.stop_btn.config(state='normal')
+            self.pipe_btn.config(state='disabled' if mech == 'pipe' else 'normal')
+            self.socket_btn.config(state='disabled' if mech == 'socket' else 'normal')
+            self.shm_btn.config(state='disabled' if mech == 'shm' else 'normal')
+            
         elif event_type == "stopped":
+            mech = event_data.get('mechanism', 'unknown')
             self.pipe_manager.is_running = False
-            self.status_var.set("Mecanismo parado")
+            self.status_var.set("Nenhum mecanismo ativo")
+            self.send_btn.config(state='disabled')
+            self.stop_btn.config(state='disabled')
+            self.pipe_btn.config(state='normal')
+            self.socket_btn.config(state='normal')
+            self.shm_btn.config(state='normal')
             self.update_pipe_display()
 
         # Atualiza a barra de status com contagem de mensagens

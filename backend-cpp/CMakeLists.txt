@@ -32,8 +32,10 @@ add_executable(ra1_ipc_backend
     src/main.cpp
     src/json_codec.cpp
     src/pipe_module.cpp
-    src/socket_module.cpp  # NOVO MÓDULO
- "src/ipc_manager.cpp")
+    src/socket_module.cpp
+    src/ipc_manager.cpp 
+    src/shared_memory_module.cpp  # NOVO MÓDULO ADICIONADO
+)
 
 # Linka a biblioteca JSON ao nosso executável
 target_link_libraries(ra1_ipc_backend PRIVATE nlohmann_json)
@@ -42,6 +44,6 @@ target_link_libraries(ra1_ipc_backend PRIVATE nlohmann_json)
 if(WIN32)
     target_link_libraries(ra1_ipc_backend 
         PRIVATE 
-            ws2_32      # Para sockets (AGORA NECESSÁRIO)
+            ws2_32      # Para sockets
     )
 endif()

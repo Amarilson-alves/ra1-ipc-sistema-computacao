@@ -1,4 +1,5 @@
 #include "ipc_manager.hpp"
+#include "shared_memory_module.hpp"
 #include <iostream>
 #include <chrono>
 #include <thread>
@@ -38,6 +39,7 @@ std::string IPCManager::make_simple_event(const std::string& event_type, const s
 IPCManager::IPCManager() : current_mechanism_("none") {
     pipe_module_ = std::make_unique<PipeModule>(this);
     socket_module_ = std::make_unique<SocketModule>(this);
+    shm_ = std::make_unique<SharedMemoryModule>(this);
 
     // Log startup
     json event = create_base_event("backend_started");
@@ -57,7 +59,7 @@ bool IPCManager::start(const std::string& mechanism) {
     if (mechanism == "pipe") {
         if (pipe_module_->start()) {
             current_mechanism_ = "pipe";
-            running_ = true;
+            running_.store(true);
 
             json event = create_base_event("started");
             event["mechanism"] = "pipe";
@@ -69,10 +71,22 @@ bool IPCManager::start(const std::string& mechanism) {
     else if (mechanism == "socket") {
         if (socket_module_->start()) {
             current_mechanism_ = "socket";
-            running_ = true;
+            running_.store(true);
 
             json event = create_base_event("started");
             event["mechanism"] = "socket";
+            std::cout << event.dump() << std::endl;
+
+            return true;
+        }
+    }
+    else if (mechanism == "shm") {
+        if (shm_->start()) {
+            current_mechanism_ = "shm";
+            running_.store(true);
+
+            json event = create_base_event("started");
+            event["mechanism"] = "shm";
             std::cout << event.dump() << std::endl;
 
             return true;
@@ -93,9 +107,12 @@ void IPCManager::stop() {
     else if (current_mechanism_ == "socket") {
         socket_module_->stop();
     }
+    else if (current_mechanism_ == "shm") {
+        shm_->stop();
+    }
 
     current_mechanism_ = "none";
-    running_ = false;
+    running_.store(false);
 
     std::cout << "DEBUG [STOP]: Parando mecanismo" << std::endl;
 }
@@ -120,6 +137,13 @@ bool IPCManager::send(const std::string& message) {
         }
         return socket_module_->send(message);
     }
+    else if (current_mechanism_ == "shm") {
+        if (!shm_->is_running()) {
+            std::cout << make_error_event("send_failed", "No active shared memory mechanism") << std::endl;
+            return false;
+        }
+        return shm_->send(message);
+    }
     else {
         std::cout << make_error_event("send_failed", "No active mechanism") << std::endl;
         return false;
@@ -140,11 +164,36 @@ std::string IPCManager::get_status() const {
         event["socket_running"] = socket_module_->is_running();
         event["socket_connected"] = socket_module_->is_connected();
     }
+    else if (current_mechanism_ == "shm") {
+        event["shm_running"] = shm_->is_running();
+        // Adicione quaisquer outros status específicos da memória compartilhada aqui
+    }
     else {
         event["mechanism"] = "none";
     }
 
     return event.dump();
+}
+
+json IPCManager::status() {
+    json j = create_base_event("status");
+    j["mechanism"] = current_mechanism_;
+    j["running"] = running_.load();  // CORRIGIDO: usando .load() para atomic
+
+    if (current_mechanism_ == "pipe" && pipe_module_) {
+        j["pipe_running"] = pipe_module_->is_running();
+    }
+    else if (current_mechanism_ == "socket" && socket_module_) {
+        j["socket_running"] = socket_module_->is_running();
+        j["socket_connected"] = socket_module_->is_connected();
+    }
+    else if (current_mechanism_ == "shm" && shm_) {
+        // Adicione o status específico da memória compartilhada
+        json shm_status = shm_->status_json();
+        j.update(shm_status); // Mescla os dados de status do shm
+    }
+
+    return j;
 }
 
 void IPCManager::run_child_mode() {

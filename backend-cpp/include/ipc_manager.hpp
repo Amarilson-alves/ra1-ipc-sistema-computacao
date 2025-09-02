@@ -6,6 +6,7 @@
 #include <atomic>
 #include "pipe_module.hpp"
 #include "socket_module.hpp"
+#include "shared_memory_module.hpp"  // ADICIONADO
 #include "nlohmann/json.hpp"
 
 using json = nlohmann::json;
@@ -19,6 +20,7 @@ public:
     void stop();
     bool send(const std::string& message);
     std::string get_status() const;
+    json status();  // ADICIONADO
     void run_child_mode();
 
     // Helper functions for event creation
@@ -29,6 +31,7 @@ public:
 private:
     std::unique_ptr<PipeModule> pipe_module_;
     std::unique_ptr<SocketModule> socket_module_;
+    std::unique_ptr<SharedMemoryModule> shm_;  // ADICIONADO
     std::string current_mechanism_;
     std::atomic<bool> running_{ false };
 };
