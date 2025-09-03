@@ -28,8 +28,9 @@ class IPCApp:
         self.root.title("RA1 IPC - Demonstração de Mecanismos IPC")
         self.root.geometry("1000x800")
 
-        # Configuração do cliente IPC
-        backend_path = Path(r"C:\Users\LorD\Documents\2 - PROJETOS VS - STUDIO\RA1 - IPC - SISTEMA DA COMPUTACAO\backend-cpp\build\bin\Release\ra1_ipc_backend.exe")
+        # Configuração do cliente IPC - CAMINHO RELATIVO
+        base_dir = Path(__file__).resolve().parents[1]
+        backend_path = base_dir / "backend-cpp" / "build" / "bin" / "Release" / "ra1_ipc_backend.exe"
         self.ipc_client = IPCClient(backend_path)
 
         self._polling_thread = None
@@ -72,7 +73,7 @@ class IPCApp:
         self.shm_btn = ttk.Button(
             mechanism_frame, text="Memória Compartilhada",
             command=lambda: self.start_mechanism("shm"),
-            state='normal'  # HABILITADO
+            state='disabled'  # DESABILITADO até que o módulo SHM esteja implementado
         )
         self.shm_btn.pack(side=tk.LEFT)
 
@@ -206,12 +207,12 @@ class IPCApp:
         def poll_events():
             while self._running:
                 event_str = self.ipc_client.get_event(block=False)
-                if event_str:
+                if event_str and event_str.strip().startswith("{"):  # Filtra JSON válido
                     try:
                         event_data = json.loads(event_str)
                         self.root.after(0, lambda: self.handle_event(event_data))
-                    except json.JSONDecodeError:
-                        self.log(f"Erro ao decodificar JSON: {event_str}")
+                    except Exception:
+                        pass  # Ignora erros de parsing silenciosamente
                 time.sleep(0.1)
 
         self._polling_thread = threading.Thread(target=poll_events, daemon=True)

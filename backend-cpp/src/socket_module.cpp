@@ -15,7 +15,7 @@ bool SocketModule::setup_winsock() {
     WSADATA wsaData;
     int result = WSAStartup(MAKEWORD(2, 2), &wsaData);
     if (result != 0) {
-        std::cout << make_error_event("winsock_init", "WSAStartup failed: " + std::to_string(result)) << std::endl;
+        std::cerr << make_error_event("winsock_init", "WSAStartup failed: " + std::to_string(result)) << std::endl;
         return false;
     }
     return true;
@@ -32,14 +32,14 @@ bool SocketModule::start() {
     // Create server socket
     server_socket_ = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
     if (server_socket_ == INVALID_SOCKET) {
-        std::cout << make_error_event("socket_create", "Failed to create server socket: " + std::to_string(WSAGetLastError())) << std::endl;
+        std::cerr << make_error_event("socket_create", "Failed to create server socket: " + std::to_string(WSAGetLastError())) << std::endl;
         return false;
     }
 
     // Set socket options
     int enable = 1;
     if (setsockopt(server_socket_, SOL_SOCKET, SO_REUSEADDR, (char*)&enable, sizeof(enable)) == SOCKET_ERROR) {
-        std::cout << make_error_event("socket_option", "Failed to set socket options: " + std::to_string(WSAGetLastError())) << std::endl;
+        std::cerr << make_error_event("socket_option", "Failed to set socket options: " + std::to_string(WSAGetLastError())) << std::endl;
         closesocket(server_socket_);
         return false;
     }
@@ -51,14 +51,14 @@ bool SocketModule::start() {
     server_addr.sin_port = htons(7070);
 
     if (bind(server_socket_, (sockaddr*)&server_addr, sizeof(server_addr)) == SOCKET_ERROR) {
-        std::cout << make_error_event("socket_bind", "Failed to bind socket: " + std::to_string(WSAGetLastError())) << std::endl;
+        std::cerr << make_error_event("socket_bind", "Failed to bind socket: " + std::to_string(WSAGetLastError())) << std::endl;
         closesocket(server_socket_);
         return false;
     }
 
     // Listen for connections
     if (listen(server_socket_, 5) == SOCKET_ERROR) {
-        std::cout << make_error_event("socket_listen", "Failed to listen on socket: " + std::to_string(WSAGetLastError())) << std::endl;
+        std::cerr << make_error_event("socket_listen", "Failed to listen on socket: " + std::to_string(WSAGetLastError())) << std::endl;
         closesocket(server_socket_);
         return false;
     }
@@ -81,13 +81,13 @@ void SocketModule::server_thread() {
         SOCKET s = accept(server_socket_, (sockaddr*)&caddr, &clen);
         if (s == INVALID_SOCKET) {
             if (running_.load()) {
-                std::cout << make_error_event("socket_accept", "accept failed: " + std::to_string(WSAGetLastError())) << std::endl;
+                std::cerr << make_error_event("socket_accept", "accept failed: " + std::to_string(WSAGetLastError())) << std::endl;
             }
             std::this_thread::sleep_for(std::chrono::milliseconds(100));
             continue;
         }
 
-        std::cout << "DEBUG [SERVER]: Client connected " << inet_ntoa(caddr.sin_addr) << ":" << ntohs(caddr.sin_port) << std::endl;
+        std::cerr << "DEBUG [SERVER]: Client connected " << inet_ntoa(caddr.sin_addr) << ":" << ntohs(caddr.sin_port) << std::endl;
 
         // ---- Leitura da primeira linha para detectar o listener
         std::string firstline;
@@ -143,7 +143,7 @@ void SocketModule::server_thread() {
             else {
                 n = recv(s, buf, sizeof(buf), 0);
                 if (n <= 0) {
-                    std::cout << "DEBUG [SERVER]: Sender disconnected" << std::endl;
+                    std::cerr << "DEBUG [SERVER]: Sender disconnected" << std::endl;
                     break;
                 }
                 acc.append(buf, n);
@@ -155,7 +155,7 @@ void SocketModule::server_thread() {
                 acc.erase(0, pos + 1);
 
                 ++messages_received_;
-                std::cout << "DEBUG [SERVER RECEIVED FROM SENDER]: " << line << std::endl;
+                std::cerr << "DEBUG [SERVER RECEIVED FROM SENDER]: " << line << std::endl;
 
                 // Monte SEMPRE JSON de resposta para o frontend
                 nlohmann::json resp = create_base_event("received");
@@ -176,21 +176,21 @@ void SocketModule::server_thread() {
                         std::string out = resp.dump() + "\n";
                         int send_result = ::send(listener_socket_, out.c_str(), static_cast<int>(out.size()), 0);
                         if (send_result == SOCKET_ERROR) {
-                            std::cout << "DEBUG [SERVER -> LISTENER SEND ERROR]: " << WSAGetLastError() << std::endl;
+                            std::cerr << "DEBUG [SERVER -> LISTENER SEND ERROR]: " << WSAGetLastError() << std::endl;
                         }
                     }
                     else {
-                        std::cout << "DEBUG [SERVER]: No listener socket registered yet" << std::endl;
+                        std::cerr << "DEBUG [SERVER]: No listener socket registered yet" << std::endl;
                     }
                 }
 
                 // (Opcional) ACK simples de volta ao remetente
                 const char* ack = "ACK\n";
                 int ack_result = ::send(s, ack, 4, 0);
-                if(ack_result == SOCKET_ERROR) {
-                    std::cout << "DEBUG [SERVER -> SENDER ACK ERROR]: " << WSAGetLastError() << std::endl;
-				}
-             
+                if (ack_result == SOCKET_ERROR) {
+                    std::cerr << "DEBUG [SERVER -> SENDER ACK ERROR]: " << WSAGetLastError() << std::endl;
+                }
+
             }
         }
 
@@ -205,7 +205,7 @@ void SocketModule::client_thread() {
 
     SOCKET c = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
     if (c == INVALID_SOCKET) {
-        std::cout << make_error_event("socket_create", "internal client invalid: " + std::to_string(WSAGetLastError())) << std::endl;
+        std::cerr << make_error_event("socket_create", "internal client invalid: " + std::to_string(WSAGetLastError())) << std::endl;
         return;
     }
 
@@ -215,7 +215,7 @@ void SocketModule::client_thread() {
     s.sin_port = htons(7070);
 
     if (connect(c, (sockaddr*)&s, sizeof(s)) == SOCKET_ERROR) {
-        std::cout << make_error_event("socket_connect", "internal client connect failed: " + std::to_string(WSAGetLastError())) << std::endl;
+        std::cerr << make_error_event("socket_connect", "internal client connect failed: " + std::to_string(WSAGetLastError())) << std::endl;
         closesocket(c);
         return;
     }
@@ -223,7 +223,7 @@ void SocketModule::client_thread() {
     // Guarda o socket do cliente interno e marca como conectado
     client_socket_ = c;
     connected_.store(true);
-    std::cout << "DEBUG [CLIENT]: Internal client connected successfully (LISTENER)" << std::endl;
+    std::cerr << "DEBUG [CLIENT]: Internal client connected successfully (LISTENER)" << std::endl;
 
     // >>> ADICIONE: handshake para o servidor reconhecer este socket como listener
     const char* hello = "{\"role\":\"listener\"}\n";
@@ -234,7 +234,7 @@ void SocketModule::client_thread() {
     while (running_.load()) {
         int n = recv(c, buf, sizeof(buf), 0);
         if (n <= 0) {
-            std::cout << "DEBUG [CLIENT]: Internal listener connection lost" << std::endl;
+            std::cerr << "DEBUG [CLIENT]: Internal listener connection lost" << std::endl;
             break;
         }
         acc.append(buf, n);
@@ -246,7 +246,7 @@ void SocketModule::client_thread() {
             if (line.empty()) continue;
 
             // DEBUG: Mostre o que está chegando
-            std::cout << "DEBUG [CLIENT RECEIVED FROM SERVER]: " << line << std::endl;
+            std::cerr << "DEBUG [CLIENT RECEIVED FROM SERVER]: " << line << std::endl;
 
             try {
                 auto j = nlohmann::json::parse(line);
@@ -254,7 +254,7 @@ void SocketModule::client_thread() {
             }
             catch (const std::exception& e) {
                 // DEBUG: Mostre o erro de parse
-                std::cout << "DEBUG [CLIENT PARSE ERROR]: " << e.what() << " for: " << line << std::endl;
+                std::cerr << "DEBUG [CLIENT PARSE ERROR]: " << e.what() << " for: " << line << std::endl;
 
                 nlohmann::json ev = create_base_event("received");
                 ev["from"] = "socket_client";
@@ -266,19 +266,19 @@ void SocketModule::client_thread() {
     closesocket(c);
     client_socket_ = INVALID_SOCKET;
     connected_.store(false);
-    std::cout << "DEBUG [CLIENT]: Internal client disconnected" << std::endl;
+    std::cerr << "DEBUG [CLIENT]: Internal client disconnected" << std::endl;
 }
 
 bool SocketModule::send(const std::string& message) {
     if (!running_.load()) {
-        std::cout << make_error_event("socket_send", "Not running") << std::endl;
+        std::cerr << make_error_event("socket_send", "Not running") << std::endl;
         return false;
     }
 
     // Cria um socket temporário para enviar a mensagem
     SOCKET temp_socket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
     if (temp_socket == INVALID_SOCKET) {
-        std::cout << make_error_event("socket_send", "Failed to create temp socket: " + std::to_string(WSAGetLastError())) << std::endl;
+        std::cerr << make_error_event("socket_send", "Failed to create temp socket: " + std::to_string(WSAGetLastError())) << std::endl;
         return false;
     }
 
@@ -287,47 +287,47 @@ bool SocketModule::send(const std::string& message) {
     server_addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
     server_addr.sin_port = htons(7070);
 
-    std::cout << "DEBUG [SEND]: Connecting to server..." << std::endl;
+    std::cerr << "DEBUG [SEND]: Connecting to server..." << std::endl;
 
     if (connect(temp_socket, (sockaddr*)&server_addr, sizeof(server_addr)) == SOCKET_ERROR) {
         int error = WSAGetLastError();
-        std::cout << make_error_event("socket_send", "Connect failed: " + std::to_string(error)) << std::endl;
+        std::cerr << make_error_event("socket_send", "Connect failed: " + std::to_string(error)) << std::endl;
         closesocket(temp_socket);
         return false;
     }
 
-    std::cout << "DEBUG [SEND]: Connected successfully, sending message..." << std::endl;
+    std::cerr << "DEBUG [SEND]: Connected successfully, sending message..." << std::endl;
 
     std::string payload = message;
     if (payload.empty() || payload.back() != '\n') payload += '\n';
 
-    std::cout << "DEBUG [SEND]: Sending to server: " << payload;
+    std::cerr << "DEBUG [SEND]: Sending to server: " << payload;
 
     int n = ::send(temp_socket, payload.c_str(), static_cast<int>(payload.size()), 0);
 
     if (n == SOCKET_ERROR) {
-        std::cout << make_error_event("socket_send", "send failed: " + std::to_string(WSAGetLastError())) << std::endl;
+        std::cerr << make_error_event("socket_send", "send failed: " + std::to_string(WSAGetLastError())) << std::endl;
         closesocket(temp_socket);
         return false;
     }
 
-    std::cout << "DEBUG [SEND]: Message sent successfully, waiting for server response..." << std::endl;
+    std::cerr << "DEBUG [SEND]: Message sent successfully, waiting for server response..." << std::endl;
 
     // AGUARDA A RESPOSTA DO SERVIDOR antes de fechar
     char response_buf[1024];
     int response_n = recv(temp_socket, response_buf, sizeof(response_buf), 0);
     if (response_n > 0) {
         std::string response(response_buf, response_n);
-        std::cout << "DEBUG [SEND]: Server response: " << response;
+        std::cerr << "DEBUG [SEND]: Server response: " << response;
     }
     else if (response_n == 0) {
-        std::cout << "DEBUG [SEND]: Server closed connection" << std::endl;
+        std::cerr << "DEBUG [SEND]: Server closed connection" << std::endl;
     }
     else {
-        std::cout << "DEBUG [SEND]: Error receiving response: " << WSAGetLastError() << std::endl;
+        std::cerr << "DEBUG [SEND]: Error receiving response: " << WSAGetLastError() << std::endl;
     }
 
-    std::cout << "DEBUG [SEND]: Closing connection..." << std::endl;
+    std::cerr << "DEBUG [SEND]: Closing connection..." << std::endl;
     closesocket(temp_socket); // Fecha o socket temporário
 
     ++messages_sent_;

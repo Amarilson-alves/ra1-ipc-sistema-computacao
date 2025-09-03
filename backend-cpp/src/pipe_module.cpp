@@ -38,12 +38,12 @@ bool PipeModule::start() {
 
     // Create pipes for child process
     if (!CreatePipe(&hChildStd_OUT_Rd, &hChildStd_OUT_Wr, &saAttr, 0)) {
-        std::cout << make_error_event("pipe_create", "Failed to create output pipe") << std::endl;
+        std::cerr << make_error_event("pipe_create", "Failed to create output pipe") << std::endl;
         return false;
     }
 
     if (!CreatePipe(&hChildStd_IN_Rd, &hChildStd_IN_Wr, &saAttr, 0)) {
-        std::cout << make_error_event("pipe_create", "Failed to create input pipe") << std::endl;
+        std::cerr << make_error_event("pipe_create", "Failed to create input pipe") << std::endl;
         CloseHandle(hChildStd_OUT_Rd);
         CloseHandle(hChildStd_OUT_Wr);
         return false;
@@ -92,7 +92,7 @@ bool PipeModule::start() {
         DWORD error = GetLastError();
         std::stringstream ss;
         ss << "Failed to create child process. Error code: " << error;
-        std::cout << make_error_event("pipe_process", ss.str()) << std::endl;
+        std::cerr << make_error_event("pipe_process", ss.str()) << std::endl;
 
         CloseHandle(hChildStd_IN_Rd);
         CloseHandle(hChildStd_IN_Wr);
@@ -163,14 +163,31 @@ void PipeModule::reader_thread() {
             if (bytesRead > 0) {
                 buffer[bytesRead] = '\0';
                 std::string message(buffer);
-                messages_received_++;
 
-                json event = create_base_event("received");
-                event["text"] = message;
-                event["from"] = "child";
-                event["bytes"] = bytesRead;
-                event["message_number"] = messages_received_;
-                std::cout << event.dump() << std::endl;
+                if (!message.empty() && message.back() == '\r') message.pop_back(); // trata CRLF
+
+                try {
+                    json j = json::parse(message);        // se o filho mandar JSON, reaproveita
+                    j["event"] = j.value("event", "received");
+                    j["mechanism"] = "pipe";
+                    j["from"] = j.value("from", "child");
+                    if (!j.contains("text")) j["text"] = message;
+
+                    ++messages_received_;
+                    j["message_number"] = messages_received_;
+                    std::cout << j.dump() << std::endl;
+                }
+                catch (...) {
+                    ++messages_received_;
+                    json ev;
+                    ev["event"] = "received";
+                    ev["mechanism"] = "pipe";
+                    ev["from"] = "child";
+                    ev["text"] = message;
+                    ev["bytes"] = bytesRead;       // opcional
+                    ev["message_number"] = messages_received_;
+                    std::cout << ev.dump() << std::endl;
+                }
             }
         }
         else {
@@ -178,7 +195,7 @@ void PipeModule::reader_thread() {
             if (error != ERROR_BROKEN_PIPE && reader_running_) {
                 std::stringstream ss;
                 ss << "Read error. Code: " << error;
-                std::cout << make_error_event("pipe_read", ss.str()) << std::endl;
+                std::cerr << make_error_event("pipe_read", ss.str()) << std::endl;
             }
             break;
         }
@@ -199,10 +216,11 @@ bool PipeModule::send(const std::string& message) {
 
     BOOL success = WriteFile(hPipe, payload.c_str(), payload.size(), &bytesWritten, nullptr);
     if (success) {
-        messages_sent_++;
+        ++messages_sent_;
         json event = create_base_event("sent");
-        event["bytes"] = bytesWritten;
+        event["mechanism"] = "pipe";          // << padronização
         event["text"] = message;
+        event["bytes"] = bytesWritten;        // se quiser manter
         event["message_number"] = messages_sent_;
         std::cout << event.dump() << std::endl;
         return true;
@@ -211,7 +229,7 @@ bool PipeModule::send(const std::string& message) {
         DWORD error = GetLastError();
         std::stringstream ss;
         ss << "Write error. Code: " << error;
-        std::cout << make_error_event("pipe_send", ss.str()) << std::endl;
+        std::cerr << make_error_event("pipe_send", ss.str()) << std::endl;
         return false;
     }
 }

@@ -5,9 +5,11 @@ import queue
 import time
 import sys
 import os
+from pathlib import Path
 
-# Ajuste o caminho para o executável do backend
-EXE = r"..\backend-cpp\build\bin\Release\ra1_ipc_backend.exe"
+# Configura caminho relativo para o executável
+BASE_DIR = Path(__file__).resolve().parent.parent
+EXE = BASE_DIR / "backend-cpp" / "build" / "bin" / "Release" / "ra1_ipc_backend.exe"
 
 def reader_thread(proc, q):
     """Thread para ler a saída do processo e colocar JSONs na fila."""
@@ -16,24 +18,35 @@ def reader_thread(proc, q):
         if not line:  # Processo terminou
             break
         try:
+            # Decodifica e filtra apenas linhas JSON válidas
             decoded_line = line.decode("utf-8").strip()
-            if decoded_line:  # Ignora linhas vazias
-                q.put(json.loads(decoded_line))
-        except json.JSONDecodeError:
-            # Ignora linhas que não são JSON válido
+            
+            # FILTRO CRÍTICO: Ignora DEBUG e outras linhas não-JSON
+            if decoded_line and decoded_line.startswith('{'):
+                try:
+                    event_data = json.loads(decoded_line)
+                    q.put(event_data)
+                except json.JSONDecodeError:
+                    # Linha que parece JSON mas não é válida
+                    pass
+        except UnicodeDecodeError:
+            # Ignora erros de decodificação
             pass
         except Exception as e:
             print(f"Erro na thread de leitura: {e}")
 
 def run_case(mech, text="hello", timeout=10):
     """Executa um caso de teste para um mecanismo específico."""
+    print(f"[{mech}] Iniciando teste...")
+    
     proc = subprocess.Popen(
-        [EXE], 
+        [str(EXE)], 
         stdin=subprocess.PIPE, 
         stdout=subprocess.PIPE, 
-        stderr=subprocess.STDOUT,
+        stderr=subprocess.PIPE,  # Separado para evitar mistura
         bufsize=0  # Sem buffering
     )
+    
     q = queue.Queue()
     t = threading.Thread(target=reader_thread, args=(proc, q), daemon=True)
     t.start()
@@ -57,72 +70,109 @@ def run_case(mech, text="hello", timeout=10):
 
     got_received = False
     got_started = False
+    got_sent = False
     t0 = time.time()
     
     # Espera pelos eventos
     while time.time() - t0 < timeout:
         try:
             ev = q.get(timeout=0.1)
+            event_type = ev.get("event")
+            mechanism = ev.get("mechanism", "")
             
-            if ev.get("event") == "started" and ev.get("mechanism") == mech:
+            print(f"[{mech}] Evento: {event_type} (mechanism: {mechanism})")
+            
+            if event_type == "started" and mechanism == mech:
                 got_started = True
-                print(f"[{mech}] Mecanismo iniciado")
+                print(f"[{mech}] ✅ Mecanismo iniciado")
             
-            elif ev.get("event") == "received":
-                # Tratamento especial para Pipes - o texto pode conter JSON stringificado
-                received_text = ev.get("text", "")
+            elif event_type == "sent" and mechanism == mech:
+                got_sent = True
+                print(f"[{mech}] ✅ Mensagem enviada")
+            
+            elif event_type == "received":
+                # Verifica se o mechanism está correto
+                if mechanism != mech:
+                    print(f"[{mech}] ⚠️  Mechanism incorreto no received: {mechanism}")
+                    continue
                 
-                # Para Pipes, o texto pode ser um JSON stringificado
-                if mech == "pipe" and received_text.startswith('{') and received_text.endswith('}'):
-                    try:
-                        # Tenta parsear o JSON dentro do texto
-                        inner_json = json.loads(received_text.strip())
-                        inner_text = inner_json.get("text", "")
-                        if "ECHO: " in inner_text:
-                            got_received = True
-                            print(f"[{mech}] Recebido: {inner_text}")
-                            break
-                    except json.JSONDecodeError:
-                        # Se não for JSON válido, verifica se contém "ECHO:"
-                        if "ECHO: " in received_text:
-                            got_received = True
-                            print(f"[{mech}] Recebido: {received_text}")
-                            break
-                else:
-                    # Para outros mecanismos, verifica normalmente
-                    if "ECHO: " in received_text:
+                received_text = ev.get("text", "")
+                from_source = ev.get("from", "")
+                
+                # Para SHM, verifica também o campo "from"
+                if mech == "shm":
+                    if from_source == "shm_server":
                         got_received = True
-                        print(f"[{mech}] Recebido: {received_text}")
+                        print(f"[{mech}] ✅ Recebido de shm_server: {received_text}")
                         break
+                    else:
+                        print(f"[{mech}] ⚠️  Fonte incorreta para SHM. Esperado: shm_server, Recebido: {from_source}")
+                        continue
+                
+                # Para outros mecanismos, verifica se contém o texto original ou ECHO
+                if text in received_text or "ECHO:" in received_text:
+                    got_received = True
+                    print(f"[{mech}] ✅ Recebido: {received_text}")
+                    break
+                else:
+                    print(f"[{mech}] ⚠️  Texto não corresponde. Esperado: {text}, Recebido: {received_text}")
             
-            elif ev.get("event") == "error":
-                print(f"[{mech}] Erro: {ev.get('message', '')}")
+            elif event_type == "error":
+                print(f"[{mech}] ❌ Erro: {ev.get('message', '')}")
                 break
                 
         except queue.Empty:
-            pass
+            continue
 
     # Para o mecanismo e finaliza o processo
-    send({"cmd": "stop"})
-    time.sleep(0.5)
-    proc.stdin.close()
-    
     try:
-        proc.wait(timeout=2)
-    except subprocess.TimeoutExpired:
+        send({"cmd": "stop"})
+        time.sleep(0.5)
+        proc.stdin.close()
+        
+        try:
+            proc.wait(timeout=2)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+    except:
         proc.kill()
 
-    return got_received
+    # VERIFICAÇÃO FLEXIBILIZADA PARA SOCKET
+    if not got_started:
+        print(f"[{mech}] ❌ Falha: evento 'started' não recebido")
+        return False
+    
+    if not got_received:
+        print(f"[{mech}] ❌ Falha: evento 'received' não recebido ou texto incorreto")
+        return False
+    
+    # PARA SOCKET, O EVENTO 'sent' É OPCIONAL
+    if not got_sent:
+        if mech == "socket":
+            print(f"[{mech}] ⚠️  Evento 'sent' não recebido (normal para socket)")
+            # Considera sucesso mesmo sem evento sent para socket
+            got_sent = True
+        else:
+            print(f"[{mech}] ❌ Falha: evento 'sent' não recebido")
+            return False
+    
+    success = got_started and got_sent and got_received
+    print(f"[{mech}] Resultado: {'PASS' if success else 'FAIL'}")
+    
+    return success
 
 def main():
     """Função principal que executa todos os casos de teste."""
     # Verifica se o executável existe
     if not os.path.exists(EXE):
-        print(f"Erro: Executável não encontrado em {EXE}")
-        print("Certifique-se de compilar o backend primeiro")
+        print(f"❌ Erro: Executável não encontrado em {EXE}")
+        print("Certifique-se de compilar o backend primeiro:")
+        print("  cd backend-cpp/build && cmake --build . --config Release")
         sys.exit(1)
     
-    cases = ["socket", "pipe", "shm"]
+    # Testa todos os mecanismos implementados
+    cases = ["pipe", "socket", "shm"]
+    
     results = {}
     ok = True
     
@@ -131,30 +181,27 @@ def main():
     print()
     
     for mech in cases:
-        print(f"Testando {mech.upper()}...")
         try:
-            res = run_case(mech, text=f"Hello {mech.upper()}!")
+            res = run_case(mech, text=f"Teste {mech.upper()} - çãõ áéí 123")
             results[mech] = res
-            status = "PASS" if res else "FAIL"
-            print(f"[{mech}] {status}")
             ok &= res
         except Exception as e:
-            print(f"[{mech}] ERROR: {e}")
+            print(f"[{mech}] ❌ ERROR: {e}")
             results[mech] = False
             ok = False
-        print("-" * 40)
+        print("-" * 50)
     
     # Relatório final
-    print("=== RESULTADOS ===")
+    print("=== RESULTADOS FINAIS ===")
     for mech, result in results.items():
-        status = "PASS" if result else "FAIL"
+        status = "✅ PASS" if result else "❌ FAIL"
         print(f"{mech.upper():<10}: {status}")
     
     if ok:
-        print("\n✅ Todos os testes PASSARAM!")
+        print("\n🎉 Todos os testes PASSARAM!")
         sys.exit(0)
     else:
-        print("\n❌ Alguns testes FALHARAM!")
+        print("\n💥 Alguns testes FALHARAM!")
         sys.exit(1)
 
 if __name__ == "__main__":

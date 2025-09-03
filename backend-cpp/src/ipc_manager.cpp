@@ -11,6 +11,12 @@ json IPCManager::create_base_event(const std::string& event_type) {
     event["event"] = event_type;
     event["pid"] = GetCurrentProcessId();
 
+    // ADICIONADO: mechanism para eventos globais
+    if (event_type == "backend_started" || event_type == "backend_stopped" ||
+        event_type == "error" || event_type == "status") {
+        event["mechanism"] = "system";
+    }
+
     // Get current timestamp in ISO 8601 format
     auto now = std::chrono::system_clock::now();
     auto in_time_t = std::chrono::system_clock::to_time_t(now);
@@ -53,8 +59,8 @@ IPCManager::~IPCManager() {
 bool IPCManager::start(const std::string& mechanism) {
     stop(); // Stop any current mechanism
 
-    std::cout << "DEBUG [COMANDO]: start" << std::endl;
-    std::cout << "DEBUG [MECANISMO]: " << mechanism << std::endl;
+    std::cerr << "DEBUG [COMANDO]: start" << std::endl;
+    std::cerr << "DEBUG [MECANISMO]: " << mechanism << std::endl;
 
     if (mechanism == "pipe") {
         if (pipe_module_->start()) {
@@ -93,7 +99,7 @@ bool IPCManager::start(const std::string& mechanism) {
         }
     }
     else {
-        std::cout << make_error_event("unknown_mechanism", "Mechanism not implemented: " + mechanism) << std::endl;
+        std::cerr << make_error_event("unknown_mechanism", "Mechanism not implemented: " + mechanism) << std::endl;
         return false;
     }
 
@@ -114,45 +120,45 @@ void IPCManager::stop() {
     current_mechanism_ = "none";
     running_.store(false);
 
-    std::cout << "DEBUG [STOP]: Parando mecanismo" << std::endl;
+    std::cerr << "DEBUG [STOP]: Parando mecanismo" << std::endl;
 }
 
 bool IPCManager::send(const std::string& message) {
-    std::cout << "DEBUG [COMANDO]: send" << std::endl;
-    std::cout << "DEBUG [SEND]: Entrou no comando send" << std::endl;
+    std::cerr << "DEBUG [COMANDO]: send" << std::endl;
+    std::cerr << "DEBUG [SEND]: Entrou no comando send" << std::endl;
 
     if (current_mechanism_ == "pipe") {
         if (!pipe_module_->is_running()) {
-            std::cout << "DEBUG [SEND ERROR]: PipeModule não está ativo" << std::endl;
-            std::cout << "DEBUG [PIPE_MODULE]: Nulo" << std::endl;
-            std::cout << make_error_event("send_failed", "No active pipe mechanism") << std::endl;
+            std::cerr << "DEBUG [SEND ERROR]: PipeModule não está ativo" << std::endl;
+            std::cerr << "DEBUG [PIPE_MODULE]: Nulo" << std::endl;
+            std::cerr << make_error_event("send_failed", "No active pipe mechanism") << std::endl;
             return false;
         }
         return pipe_module_->send(message);
     }
     else if (current_mechanism_ == "socket") {
         if (!socket_module_->is_running()) {
-            std::cout << make_error_event("send_failed", "No active socket mechanism") << std::endl;
+            std::cerr << make_error_event("send_failed", "No active socket mechanism") << std::endl;
             return false;
         }
         return socket_module_->send(message);
     }
     else if (current_mechanism_ == "shm") {
         if (!shm_->is_running()) {
-            std::cout << make_error_event("send_failed", "No active shared memory mechanism") << std::endl;
+            std::cerr << make_error_event("send_failed", "No active shared memory mechanism") << std::endl;
             return false;
         }
         return shm_->send(message);
     }
     else {
-        std::cout << make_error_event("send_failed", "No active mechanism") << std::endl;
+        std::cerr << make_error_event("send_failed", "No active mechanism") << std::endl;
         return false;
     }
 }
 
 std::string IPCManager::get_status() const {
-    std::cout << "DEBUG [COMANDO]: status" << std::endl;
-    std::cout << "DEBUG [STATUS]: Solicitando status" << std::endl;
+    std::cerr << "DEBUG [COMANDO]: status" << std::endl;
+    std::cerr << "DEBUG [STATUS]: Solicitando status" << std::endl;
 
     json event = create_base_event("status");
     event["mechanism"] = current_mechanism_;

@@ -1,0 +1,3 @@
+mechanism,n,lat_avg_ms,lat_p95_ms,throughput_msg_s
+pipe,400,0.638,4.772,1566.998
+socket,400,1.329,4.723,752.587

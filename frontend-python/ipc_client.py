@@ -88,7 +88,7 @@ class IPCClient:
                 if not line: # EOF
                     break
                 line = line.strip()
-                if line: # Linha não vazia
+                if line and line.startswith("{"):   # Filtra DEBUG: ignora linhas que não começam com {
                     self.stdout_queue.put(line)
             except ValueError: # Isso pode acontecer se o pipe for fechado durante a leitura
                 break
