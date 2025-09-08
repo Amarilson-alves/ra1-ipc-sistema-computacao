@@ -70,13 +70,13 @@ python frontend-python/main.py
   - Escrita/leitura em memória compartilhada (com sincronização).
 
 ## ✅ Checklist da Rubrica
-- [ ] Organização do repositório
-- [ ] README com como compilar/rodar
-- [ ] Implementação dos 3 IPCs (pipes, sockets, shm)
-- [ ] UI Tkinter funcional (JSON i/o)
-- [ ] Testes básicos
-- [ ] Logs/Métricas
-- [ ] Demonstração (gif/print) no README
+- [✅] Organização do repositório
+- [✅] README com como compilar/rodar
+- [✅] Implementação dos 3 IPCs (pipes, sockets, shm)
+- [✅] UI Tkinter funcional (JSON i/o)
+- [✅] Testes básicos
+- [✅] Logs/Métricas
+- [✅] Demonstração (gif/print) no README
 
 ## 🚀 Como publicar
 ```bash
